@@ -176,7 +176,7 @@ protected:
     {
         bufferPrintf("#%" PRIi64, immediate);
     }
-    
+
     void appendUnsignedImmediate(unsigned immediate)
     {
         bufferPrintf("#%u", immediate);
@@ -186,7 +186,7 @@ protected:
     {
         bufferPrintf("#0x%x", immediate);
     }
-    
+
     void appendUnsignedImmediate64(uint64_t immediate)
     {
         bufferPrintf("#0x%" PRIx64, immediate);
@@ -198,39 +198,49 @@ protected:
     {
         bufferPrintf("lsl #%u", 16 * amount);
     }
-    
+
     void appendSIMDLaneIndexAndType(unsigned imm6)
     {
-        unsigned lane = 0;
-        if ((imm6 & 0b100001) == 0b000001) {
-            bufferPrintf(".8B");
-            lane = ((imm6 & 0b011110) >> 1);
-        } else if ((imm6 & 0b100001) == 0b000001) {
-            bufferPrintf(".16B");
-            lane = ((imm6 & 0b011110) >> 1);
-        } else if ((imm6 & 0b100011) == 0b000010) {
-            bufferPrintf(".H");
-            lane = ((imm6 & 0b011100) >> 2);
-        } else if ((imm6 & 0b100111) == 0b000100) {
-            bufferPrintf(".S");
-            lane = ((imm6 & 0b011000) >> 3);
-            // This is overly permissive; for some instructions (like umov), bit 6 must be 1.
-        } else if ((imm6 & 0b001111) == 0b001000) {
-            bufferPrintf(".D");
-            lane = ((imm6 & 0b010000) >> 4);
-        } else {
-            dataLogLn("Dissassembler saw invalid simd lane type ", imm6);
-            bufferPrintf(".INVALID_LANE_TYPE");
-        }
+        unsigned q = imm6 >> 5;
+        unsigned imm5 = imm6 & 0x1F;
+
+        appendSIMDLaneType(q, size());
+
+        unsigned lane = (imm5 & 0xF) >> 1;
         bufferPrintf("[#%u]", lane);
     }
-    
-    void appendSIMDLaneType(unsigned q)
+
+    void appendSIMDLaneType(unsigned q, unsigned size)
     {
-        if (q)
-            bufferPrintf(".16B");
-        else
-            bufferPrintf(".8B");
+        switch (size) {
+        case 0:
+            if (q)
+                bufferPrintf(".16B");
+            else
+                bufferPrintf(".8B");
+            break;
+        case 1:
+            if (q)
+                bufferPrintf(".8H");
+            else
+                bufferPrintf(".4H");
+            break;
+        case 2:
+            if (q)
+                bufferPrintf(".4S");
+            else
+                bufferPrintf(".2S");
+            break;
+        case 3:
+            if (q)
+                bufferPrintf(".2D");
+            else
+                bufferPrintf(".1D");
+            break;
+        default:
+            bufferPrintf(".UNKNOWN");
+            break;
+        }
     }
 
     static constexpr int bufferSize = 101;
@@ -381,15 +391,15 @@ class A64DOpcodeDataProcessing1Source : public A64DOpcode {
 private:
     static const char* const s_opNames[8];
     static const char* const s_pacAutOpNames[18];
-    
+
 public:
     static constexpr uint32_t mask = 0x5fe00000;
     static constexpr uint32_t pattern = 0x5ac00000;
-    
+
     DEFINE_STATIC_FORMAT(A64DOpcodeDataProcessing1Source, thisObj);
-    
+
     const char* format();
-    
+
     const char* opName() { return s_opNames[opNameIndex()]; }
     unsigned sBit() { return (m_opcode >> 29) & 0x1; }
     unsigned opCode() { return (m_opcode >> 10) & 0x3f; }
@@ -476,13 +486,13 @@ public:
 class A64DOpcodeFloatingPointCompare : public A64DOpcodeFloatingPointOps {
 private:
     static const char* const s_opNames[16];
-    
+
 public:
     static constexpr uint32_t mask = 0x5f203c00;
     static constexpr uint32_t pattern = 0x1e202000;
-    
+
     DEFINE_STATIC_FORMAT(A64DOpcodeFloatingPointCompare, thisObj);
-    
+
     const char* format();
 
     const char* opName() { return (opNum() & 0x2) ? "fcmpe" : "fcmp"; }
@@ -496,13 +506,13 @@ class A64DOpcodeFloatingPointConditionalSelect : public A64DOpcodeFloatingPointO
 public:
     static constexpr uint32_t mask = 0x5f200c00;
     static constexpr uint32_t pattern = 0x1e200c00;
-    
+
     DEFINE_STATIC_FORMAT(A64DOpcodeFloatingPointConditionalSelect, thisObj);
-    
+
     const char* format();
-    
+
     const char* opName() { return "fcsel"; }
-    
+
     unsigned condition() { return (m_opcode >> 12) & 0xf; }
 };
 
@@ -543,15 +553,15 @@ public:
 class A64DOpcodeFloatingFixedPointConversions : public A64DOpcodeFloatingPointOps {
 private:
     static const char* const s_opNames[4];
-    
+
 public:
     static constexpr uint32_t mask = 0x5f200000;
     static constexpr uint32_t pattern = 0x1e000000;
-    
+
     DEFINE_STATIC_FORMAT(A64DOpcodeFloatingFixedPointConversions, thisObj);
-    
+
     const char* format();
-    
+
     const char* opName() { return s_opNames[opNum()]; }
     unsigned rmode() { return (m_opcode >> 19) & 0x3; }
     unsigned opcode() { return (m_opcode >> 16) & 0x7; }
@@ -562,7 +572,7 @@ public:
 class A64DOpcodeFloatingPointIntegerConversions : public A64DOpcodeFloatingPointOps {
 private:
     static const char* const s_opNames[32];
-    
+
 public:
     static constexpr uint32_t mask = 0x5f20fc00;
     static constexpr uint32_t pattern = 0x1e200000;
@@ -727,7 +737,7 @@ public:
 class A64DOpcodeLoadStoreAuthenticated : public A64DOpcodeLoadStore {
 private:
     static const char* const s_opNames[2];
-    
+
 protected:
     const char* opName()
     {
@@ -737,9 +747,9 @@ protected:
 public:
     static constexpr uint32_t mask = 0xff200400;
     static constexpr uint32_t pattern = 0xf8200400;
-    
+
     DEFINE_STATIC_FORMAT(A64DOpcodeLoadStoreAuthenticated, thisObj);
-    
+
     const char* format();
 
     unsigned opNum() { return mBit(); }
@@ -747,7 +757,6 @@ public:
     unsigned sBit() { return (m_opcode >> 22) & 0x1; }
     unsigned wBit() { return (m_opcode >> 11) & 0x1; }
     int immediate10() { return (sBit() << 9) | ((m_opcode >> 12) & 0x1ff); }
-    
 };
 
 class A64DOpcodeLoadAtomic : public A64DOpcodeLoadStore {
@@ -990,7 +999,7 @@ public:
 
     const char* format();
     const char* opName();
-    
+
     unsigned rd() { return (m_opcode >> 0) & 0b11111; }
     unsigned rt() { return (m_opcode >> 5) & 0b11111; }
     unsigned op10_15() { return (m_opcode >> 10) & 0b11111; }
@@ -1007,7 +1016,7 @@ public:
 
     const char* format();
     const char* opName();
-    
+
     unsigned rd() { return (m_opcode >> 0) & 0b11111; }
     unsigned rn() { return (m_opcode >> 5) & 0b11111; }
     unsigned op10_15() { return (m_opcode >> 10) & 0b11111; }
